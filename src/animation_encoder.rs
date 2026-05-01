@@ -277,6 +277,36 @@ mod tests {
     }
 
     #[test]
+    fn animencoder_roundtrip_does_not_include_trailing_frame_data() {
+        let mut config = default_config();
+        config.lossless = 1;
+        config.quality = 100.0;
+
+        let image = [
+            250, 0, 0, // Declared 1x1 frame data.
+            0, 250, 0, // Trailing data that is not part of the frame.
+            0, 0, 250, //
+            250, 250, 0, //
+        ];
+
+        let mut encoder = AnimEncoder::new(2, 2, &config);
+        encoder.add_frame(AnimFrame::from_rgb(&image, 1, 1, 0));
+
+        let webp = encoder.encode();
+        let anim = AnimDecoder::new(&webp).decode().unwrap();
+        let frame = anim.get_frame(0).unwrap();
+        let pixels: Vec<_> = frame.get_image().chunks_exact(4).collect();
+
+        assert_eq!(&pixels[0], &&[250, 0, 0, 255]);
+        for garbage in [[0, 250, 0, 255], [0, 0, 250, 255], [250, 250, 0, 255]] {
+            assert!(
+                !pixels[1..].contains(&garbage.as_slice()),
+                "decoded pixels included trailing frame data: {pixels:?}"
+            );
+        }
+    }
+
+    #[test]
     fn test_animdecoder_decode_failure_on_invalid_data() {
         let data = vec![0u8; 10];
         let decoder = AnimDecoder::new(&data);
